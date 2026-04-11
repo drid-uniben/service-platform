@@ -1,0 +1,64 @@
+name: Withdraw PR
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  withdraw_pr:
+    if: github.event.issue.pull_request == null && contains(github.event.comment.body, 'withdraw')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Parse withdraw comment
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+        run: |
+          COMMENT_LOWER=$(echo "$COMMENT" | tr '[:upper:]' '[:lower:]')
+          if [[ "$COMMENT_LOWER" =~ withdraw[[:space:]]*(pr[[:space:]]*)?\#([0-9]+)[[:space:]]* ]]; then
+            echo "pr_number=${BASH_REMATCH[2]}" >> "$GITHUB_ENV"
+          else
+            echo "Invalid withdraw format"
+            exit 1
+          fi
+
+      - name: Retrieve project ID
+        run: |
+          QUERY='{"query":"{ repository(owner: \"'"${{ github.repository_owner }}"'\", name: \"'"${{ github.event.repository.name }}"'\") { projectsV2(first: 20) { nodes { id title } } } }"}'
+          RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$QUERY" https://api.github.com/graphql)
+          PROJECT_ID=$(echo "$RESPONSE" | jq -r '.data.repository.projectsV2.nodes[] | select(.title == "Service Platform").id')
+          [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "null" ] && exit 1
+          echo "PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Ensure commenter is assigned
+        run: |
+          curl -s -H "Authorization: token ${{ secrets.PAT_TOKEN }}" https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.issue.number }} > issue.json
+          COMMENTER="${{ github.event.comment.user.login }}"
+          ASSIGNED=$(jq --arg user "$COMMENTER" '.assignees[]?.login | select(. == $user)' issue.json)
+          if [ -z "$ASSIGNED" ]; then
+            echo "User is not assigned"
+            exit 0
+          fi
+
+      - name: Remove closes reference from PR body
+        run: |
+          PR_BODY=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ github.repository }}/pulls/${{ env.pr_number }} | jq -r '.body')
+          NEW_PR_BODY=$(echo "$PR_BODY" | sed "s/Closes #${{ github.event.issue.number }}//g")
+          PAYLOAD=$(jq -n --arg body "$NEW_PR_BODY" '{body: $body}')
+          curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Content-Type: application/json" -d "$PAYLOAD" https://api.github.com/repos/${{ github.repository }}/pulls/${{ env.pr_number }} >/dev/null
+
+      - name: Move task to Claimed
+        run: |
+          ITEM_QUERY='{"query":"{ repository(owner: \"'"${{ github.repository_owner }}"'\", name: \"'"${{ github.event.repository.name }}"'\") { issue(number: '"${{ github.event.issue.number }}"') { projectItems(first: 10) { nodes { id } } } } }"}'
+          ITEM_RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$ITEM_QUERY" https://api.github.com/graphql)
+          ITEM_ID=$(echo "$ITEM_RESPONSE" | jq -r '.data.repository.issue.projectItems.nodes[0].id')
+
+          FIELD_QUERY='{"query":"{ node(id: \"'"${{ env.PROJECT_ID }}"'\") { ... on ProjectV2 { fields(first: 20) { nodes { ... on ProjectV2SingleSelectField { name id options { id name } } } } } } }"}'
+          FIELD_RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$FIELD_QUERY" https://api.github.com/graphql)
+          FIELD_ID=$(echo "$FIELD_RESPONSE" | jq -r '.data.node.fields.nodes[] | select(.name == "Status").id')
+          CLAIMED_ID=$(echo "$FIELD_RESPONSE" | jq -r '.data.node.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Claimed").id')
+
+          QUERY='{"query":"mutation { updateProjectV2ItemFieldValue(input: { projectId: \"'"${{ env.PROJECT_ID }}"'\", itemId: \"'"$ITEM_ID"'\", fieldId: \"'"$FIELD_ID"'\", value: { singleSelectOptionId: \"'"$CLAIMED_ID"'\" } }) { projectV2Item { id } } }"}'
+          curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$QUERY" https://api.github.com/graphql >/dev/null

@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+model Account {
+  id               String            @id @default(cuid())
+  name             String
+  createdAt        DateTime          @default(now())
+  apiKeys          ApiKey[]
+  emailMessages    EmailMessage[]
+  webhookEndpoints WebhookEndpoint[]
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  keyHash   String   @unique
+  accountId String
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model EmailMessage {
+  id           String            @id @default(cuid())
+  accountId    String
+  to           String
+  subject      String
+  html         String
+  text         String?
+  status       EmailStatus       @default(queued)
+  providerUsed String?
+  createdAt    DateTime          @default(now())
+  attempts     ProviderAttempt[]
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model ProviderAttempt {
+  id             String        @id @default(cuid())
+  emailMessageId String
+  provider       String
+  status         AttemptStatus
+  errorMessage   String?
+  createdAt      DateTime      @default(now())
+
+  emailMessage EmailMessage @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+
+  @@index([emailMessageId])
+}
+
+model WebhookEndpoint {
+  id        String   @id @default(cuid())
+  accountId String
+  url       String
+  secret    String
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+enum EmailStatus {
+  queued
+  sent
+  failed
+}
+
+enum AttemptStatus {
+  sent
+  failed
+}
