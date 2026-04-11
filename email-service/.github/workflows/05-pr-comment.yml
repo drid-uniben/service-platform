@@ -1,0 +1,69 @@
+name: Awaiting Review
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  awaiting_author:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, 'awaiting-author')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Label awaiting-author
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number: issue_number } = context.issue;
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ['awaiting-author'] });
+            await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'awaiting-review' }).catch(() => {});
+
+  awaiting_review:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, 'awaiting-review')
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Label awaiting-review
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number: issue_number } = context.issue;
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ['awaiting-review'] });
+            await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'awaiting-author' }).catch(() => {});
+
+      - name: Retrieve project ID
+        run: |
+          QUERY='{"query":"{ repository(owner: \"'"${{ github.repository_owner }}"'\", name: \"'"${{ github.event.repository.name }}"'\") { projectsV2(first: 20) { nodes { id title } } } }"}'
+          RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$QUERY" https://api.github.com/graphql)
+          PROJECT_ID=$(echo "$RESPONSE" | jq -r '.data.repository.projectsV2.nodes[] | select(.title == "Service Platform").id')
+          [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "null" ] && exit 1
+          echo "PROJECT_ID=$PROJECT_ID" >> "$GITHUB_ENV"
+
+      - name: Resolve linked issue from PR body
+        run: |
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.issue.number }} > pr.json
+          ISSUE_NUMBER=$(jq -r '.body | capture("Closes #(?<num>[0-9]+)") | .num' pr.json)
+          if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" = "null" ]; then
+            echo "No linked issue"
+            exit 1
+          fi
+          echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Move linked issue to In Review
+        run: |
+          ITEM_QUERY='{"query":"{ repository(owner: \"'"${{ github.repository_owner }}"'\", name: \"'"${{ github.event.repository.name }}"'\") { issue(number: '"${{ env.ISSUE_NUMBER }}"') { projectItems(first: 10) { nodes { id } } } } }"}'
+          ITEM_RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$ITEM_QUERY" https://api.github.com/graphql)
+          ITEM_ID=$(echo "$ITEM_RESPONSE" | jq -r '.data.repository.issue.projectItems.nodes[0].id')
+
+          FIELD_QUERY='{"query":"{ node(id: \"'"${{ env.PROJECT_ID }}"'\") { ... on ProjectV2 { fields(first: 20) { nodes { ... on ProjectV2SingleSelectField { name id options { id name } } } } } } }"}'
+          FIELD_RESPONSE=$(curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$FIELD_QUERY" https://api.github.com/graphql)
+          FIELD_ID=$(echo "$FIELD_RESPONSE" | jq -r '.data.node.fields.nodes[] | select(.name == "Status").id')
+          IN_REVIEW_ID=$(echo "$FIELD_RESPONSE" | jq -r '.data.node.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review").id')
+
+          QUERY='{"query":"mutation { updateProjectV2ItemFieldValue(input: { projectId: \"'"${{ env.PROJECT_ID }}"'\", itemId: \"'"$ITEM_ID"'\", fieldId: \"'"$FIELD_ID"'\", value: { singleSelectOptionId: \"'"$IN_REVIEW_ID"'\" } }) { projectV2Item { id } } }"}'
+          curl -s -X POST -H "Authorization: Bearer ${{ secrets.PAT_TOKEN }}" -H "Content-Type: application/json" --data "$QUERY" https://api.github.com/graphql >/dev/null
