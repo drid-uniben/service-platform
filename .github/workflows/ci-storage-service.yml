@@ -35,10 +35,10 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
+        run: uv sync --group dev --frozen
 
       - name: Lint
-        run: ruff check app alembic
+        run: uv run ruff check app alembic
 
       - name: Build
-        run: python -m compileall app
+        run: uv run python -m compileall app

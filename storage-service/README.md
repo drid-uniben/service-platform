@@ -13,9 +13,15 @@ cp .env.example .env
 2. Install dependencies (uv-managed virtual environment):
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync --group dev
+```
+
+Use uv dependency management commands directly:
+
+```bash
+uv add <package>
+uv add --dev <package>
+uv remove <package>
 ```
 
 3. Run migrations:

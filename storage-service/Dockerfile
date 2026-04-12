@@ -7,10 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV NODE_ENV=production
 ENV STORAGE_ROOT=/data/storage
-ENV UV_SYSTEM_PYTHON=1
+ENV UV_LINK_MODE=copy
 
-COPY requirements.txt ./requirements.txt
-RUN uv pip install --system --no-cache -r requirements.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --no-dev --frozen
 
 COPY app ./app
 COPY alembic ./alembic
