@@ -1,0 +1,36 @@
+name: Container CI - Storage Service
+
+on:
+  pull_request:
+    paths:
+      - "storage-service/**"
+      - ".github/workflows/container-storage-service.yml"
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "storage-service/**"
+      - ".github/workflows/container-storage-service.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  container-build:
+    if: ${{ hashFiles('storage-service/Dockerfile') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: storage-service
+          file: storage-service/Dockerfile
+          push: false
+          tags: storage-service:ci

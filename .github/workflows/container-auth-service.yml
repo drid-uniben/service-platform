@@ -1,0 +1,36 @@
+name: Container CI - Auth Service
+
+on:
+  pull_request:
+    paths:
+      - "auth-service/**"
+      - ".github/workflows/container-auth-service.yml"
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "auth-service/**"
+      - ".github/workflows/container-auth-service.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  container-build:
+    if: ${{ hashFiles('auth-service/Dockerfile') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: auth-service
+          file: auth-service/Dockerfile
+          push: false
+          tags: auth-service:ci

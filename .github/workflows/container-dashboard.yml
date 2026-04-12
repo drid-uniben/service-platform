@@ -1,0 +1,36 @@
+name: Container CI - Dashboard
+
+on:
+  pull_request:
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/container-dashboard.yml"
+  push:
+    branches:
+      - main
+      - staging
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/container-dashboard.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  container-build:
+    if: ${{ hashFiles('dashboard/Dockerfile') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: dashboard
+          file: dashboard/Dockerfile
+          push: false
+          tags: dashboard:ci
