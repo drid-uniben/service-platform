@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies.auth import require_api_key
-from app.schemas import RegisterWebhookRequest, WebhookEndpointResponse
+from app.schemas.webhooks import RegisterWebhookRequest, WebhookEndpointResponse
 from app.services.webhook_service import register_endpoint
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])

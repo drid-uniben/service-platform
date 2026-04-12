@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.dependencies.auth import require_api_key
-from app.schemas import QueueStorageResponse, StorageObjectResponse, StoreObjectRequest
+from app.schemas.objects import QueueStorageResponse, StorageObjectResponse, StoreObjectRequest
 from app.services.storage_service import (
     get_status,
     process_storage_object,
