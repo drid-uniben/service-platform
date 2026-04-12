@@ -8,4 +8,13 @@ dist
 coverage
 *.log
 pnpm-debug.log*
-Dockerfile
+__pycache__
+*.pyc
+.venv
+venv
+src
+prisma
+tsconfig.json
+tsconfig.build.json
+package.json
+pnpm-lock.yaml
