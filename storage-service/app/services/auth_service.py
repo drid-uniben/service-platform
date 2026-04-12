@@ -1,18 +1,17 @@
 from sqlalchemy.orm import Session
 
-from app.models import Account, ApiKey
+from app.models import ApiKey
+from app.repositories.auth_repository import create_account, create_api_key_record, get_api_key_by_hash
 from app.security import generate_api_key, sha256
 
 
 def create_api_key(db: Session, account_name: str) -> dict[str, str]:
-    account = Account(name=account_name)
-    db.add(account)
-    db.flush()
+    account = create_account(db, account_name)
 
     plaintext_key = generate_api_key()
     key_hash = sha256(plaintext_key)
 
-    db.add(ApiKey(key_hash=key_hash, account_id=account.id))
+    create_api_key_record(db, account.id, key_hash)
     db.commit()
 
     return {"accountId": account.id, "apiKey": plaintext_key}
@@ -20,4 +19,4 @@ def create_api_key(db: Session, account_name: str) -> dict[str, str]:
 
 def validate_api_key(db: Session, plaintext_api_key: str) -> ApiKey | None:
     key_hash = sha256(plaintext_api_key)
-    return db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+    return get_api_key_by_hash(db, key_hash)

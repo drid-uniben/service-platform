@@ -18,16 +18,27 @@ permissions:
 
 jobs:
   container-build:
-    if: ${{ hashFiles('email-service/Dockerfile') != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check Dockerfile
+        id: dockerfile
+        run: |
+          if [ -f email-service/Dockerfile ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: email-service/Dockerfile not found"
+          fi
+
       - name: Set up Docker Buildx
+        if: ${{ steps.dockerfile.outputs.exists == 'true' }}
         uses: docker/setup-buildx-action@v3
 
       - name: Build image
+        if: ${{ steps.dockerfile.outputs.exists == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: email-service

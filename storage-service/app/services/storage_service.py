@@ -7,7 +7,13 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionLocal
-from app.models import AttemptStatus, ObjectStatus, ProviderAttempt, StorageObject
+from app.models import AttemptStatus, ObjectStatus, StorageObject
+from app.repositories.storage_repository import (
+    add_provider_attempt,
+    create_storage_object,
+    get_storage_object_by_id,
+    get_storage_object_for_account,
+)
 from app.storage_paths import InvalidObjectKeyError, resolve_storage_path
 from app.services.webhook_service import emit_storage_event
 
@@ -20,26 +26,14 @@ def queue_storage(
     content_type: str | None,
     size_bytes: int | None,
 ) -> StorageObject:
-    storage_object = StorageObject(
-        account_id=account_id,
-        object_key=object_key,
-        source_url=source_url,
-        content_type=content_type,
-        size_bytes=size_bytes,
-        status=ObjectStatus.queued,
-    )
-    db.add(storage_object)
+    storage_object = create_storage_object(db, account_id, object_key, source_url, content_type, size_bytes)
     db.commit()
     db.refresh(storage_object)
     return storage_object
 
 
 def get_status(db: Session, account_id: str, object_id: str) -> StorageObject:
-    storage_object = (
-        db.query(StorageObject)
-        .filter(StorageObject.id == object_id, StorageObject.account_id == account_id)
-        .first()
-    )
+    storage_object = get_storage_object_for_account(db, account_id, object_id)
     if not storage_object:
         raise HTTPException(status_code=404, detail="Storage object not found.")
     return storage_object
@@ -55,7 +49,7 @@ def validate_object_key_path(settings: Settings, account_id: str, object_key: st
 def process_storage_object(storage_object_id: str, request_id: str | None, settings: Settings) -> None:
     db = SessionLocal()
     try:
-        storage_object = db.query(StorageObject).filter(StorageObject.id == storage_object_id).first()
+        storage_object = get_storage_object_by_id(db, storage_object_id)
         if not storage_object:
             return
 
@@ -73,13 +67,7 @@ def process_storage_object(storage_object_id: str, request_id: str | None, setti
             Path(absolute_path).parent.mkdir(parents=True, exist_ok=True)
             Path(absolute_path).write_bytes(data)
 
-            db.add(
-                ProviderAttempt(
-                    storage_object_id=storage_object.id,
-                    provider="vps-disk",
-                    status=AttemptStatus.stored,
-                )
-            )
+            add_provider_attempt(db, storage_object.id, "vps-disk", AttemptStatus.stored)
 
             storage_object.status = ObjectStatus.stored
             storage_object.provider_used = "vps-disk"
@@ -109,13 +97,12 @@ def process_storage_object(storage_object_id: str, request_id: str | None, setti
         except Exception as error:  # noqa: BLE001
             failure_reason = str(error)
 
-            db.add(
-                ProviderAttempt(
-                    storage_object_id=storage_object.id,
-                    provider="vps-disk",
-                    status=AttemptStatus.failed,
-                    error_message=failure_reason,
-                )
+            add_provider_attempt(
+                db,
+                storage_object.id,
+                "vps-disk",
+                AttemptStatus.failed,
+                error_message=failure_reason,
             )
 
             storage_object.status = ObjectStatus.failed

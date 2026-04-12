@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.dependencies.auth import require_api_key
+from app.schemas.mappers import to_storage_object_response
 from app.schemas.objects import QueueStorageResponse, StorageObjectResponse, StoreObjectRequest
 from app.services.storage_service import (
     get_status,
@@ -54,16 +55,4 @@ def get_storage_status_route(
 ):
     account_id, _ = auth
     storage_object = get_status(db, account_id, object_id)
-
-    return {
-        "id": storage_object.id,
-        "accountId": storage_object.account_id,
-        "objectKey": storage_object.object_key,
-        "sourceUrl": storage_object.source_url,
-        "contentType": storage_object.content_type,
-        "sizeBytes": storage_object.size_bytes,
-        "status": storage_object.status.value,
-        "providerUsed": storage_object.provider_used,
-        "storedUrl": storage_object.stored_url,
-        "createdAt": storage_object.created_at,
-    }
+    return to_storage_object_response(storage_object)
