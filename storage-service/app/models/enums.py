@@ -1,5 +1,6 @@
 import enum
 
+
 class ObjectStatus(enum.Enum):
     queued = "queued"
     stored = "stored"

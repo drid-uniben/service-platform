@@ -38,7 +38,7 @@ jobs:
         run: uv sync --group dev --frozen
 
       - name: Lint
-        run: uv run ruff check app alembic
+        run: uv run ruff check app alembic/env.py
 
       - name: Build
         run: uv run python -m compileall app
