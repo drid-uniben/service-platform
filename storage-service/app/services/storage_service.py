@@ -14,8 +14,8 @@ from app.repositories.storage_repository import (
     get_storage_object_by_id,
     get_storage_object_for_account,
 )
-from app.storage_paths import InvalidObjectKeyError, resolve_storage_path
 from app.services.webhook_service import emit_storage_event
+from app.storage_paths import InvalidObjectKeyError, resolve_storage_path
 
 
 def queue_storage(

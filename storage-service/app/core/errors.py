@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -29,7 +29,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "path": request.url.path,
             "requestId": getattr(request.state, "request_id", None),
             "error": payload,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
     )
 

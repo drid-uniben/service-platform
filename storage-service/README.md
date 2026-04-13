@@ -51,9 +51,11 @@ uv run alembic upgrade head
 docker compose up --build
 ```
 
+The compose setup only runs the storage service. Provide `DATABASE_URL` in `.env` so it can connect to your external PostgreSQL database.
+
 ## Required Env
 
-- `DATABASE_URL`: PostgreSQL SQLAlchemy connection string.
+- `DATABASE_URL`: PostgreSQL SQLAlchemy connection string for an existing database.
 - `STORAGE_ROOT`: absolute path where files are written (default: `/data/storage`).
 - `API_KEY_RATE_LIMIT_PER_MINUTE`: set `0` to disable rate limiting.
 

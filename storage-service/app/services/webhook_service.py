@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 from sqlalchemy.orm import Session
@@ -21,7 +21,7 @@ def emit_storage_event(db: Session, account_id: str, payload: dict) -> None:
     if not endpoints:
         return
 
-    body = json.dumps({**payload, "timestamp": datetime.now(timezone.utc).isoformat()})
+    body = json.dumps({**payload, "timestamp": datetime.now(UTC).isoformat()})
     with httpx.Client(timeout=10.0) as client:
         for endpoint in endpoints:
             signature = hmac_sha256(endpoint.secret, body)
