@@ -10,6 +10,7 @@ def to_storage_object_response(storage_object: StorageObject) -> dict:
         "contentType": storage_object.content_type,
         "sizeBytes": storage_object.size_bytes,
         "status": storage_object.status.value,
+        "visibility": storage_object.visibility.value,
         "providerUsed": storage_object.provider_used,
         "storedUrl": storage_object.stored_url,
         "createdAt": storage_object.created_at,

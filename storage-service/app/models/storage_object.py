@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.models.enums import ObjectStatus
+from app.models.enums import FileVisibility, ObjectStatus
 
 
 class StorageObject(Base):
@@ -18,6 +18,9 @@ class StorageObject(Base):
     content_type: Mapped[str | None] = mapped_column(String, nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[ObjectStatus] = mapped_column(Enum(ObjectStatus), default=ObjectStatus.queued, nullable=False)
+    visibility: Mapped[FileVisibility] = mapped_column(
+        Enum(FileVisibility), default=FileVisibility.private, nullable=False
+    )
     provider_used: Mapped[str | None] = mapped_column(String, nullable=True)
     stored_url: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

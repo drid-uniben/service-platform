@@ -2,12 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, HttpUrl, field_validator
 
+from app.models.enums import FileVisibility
+
 
 class StoreObjectRequest(BaseModel):
     objectKey: str
     sourceUrl: HttpUrl
     contentType: str | None = None
     sizeBytes: int | None = None
+    visibility: FileVisibility = FileVisibility.private
 
     @field_validator("objectKey")
     @classmethod
@@ -46,6 +49,7 @@ class StorageObjectResponse(BaseModel):
     contentType: str | None
     sizeBytes: int | None
     status: str
+    visibility: FileVisibility
     providerUsed: str | None
     storedUrl: str | None
     createdAt: datetime

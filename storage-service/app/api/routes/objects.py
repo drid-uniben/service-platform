@@ -1,12 +1,15 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.dependencies.auth import require_api_key
+from app.models.enums import FileVisibility
 from app.schemas.mappers import to_storage_object_response
 from app.schemas.objects import QueueStorageResponse, StorageObjectResponse, StoreObjectRequest
 from app.services.storage_service import (
+    get_public_file_path,
     get_status,
     process_storage_object,
     queue_storage,
@@ -36,6 +39,7 @@ def queue_storage_route(
         str(payload.sourceUrl),
         payload.contentType,
         payload.sizeBytes,
+        payload.visibility,
     )
 
     background_tasks.add_task(
@@ -53,6 +57,7 @@ def upload_storage_route(
     request: Request,
     object_key: str = Form(..., alias="objectKey"),
     file: UploadFile = File(...),
+    visibility: FileVisibility = Form(default=FileVisibility.private),
     auth: tuple[str, str] = Depends(require_api_key),
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
@@ -67,9 +72,21 @@ def upload_storage_route(
         file,
         settings,
         getattr(request.state, "request_id", None),
+        visibility,
     )
 
     return to_storage_object_response(storage_object)
+
+
+@router.get("/public/{account_id}/{object_key:path}", response_class=FileResponse)
+def get_public_file_route(
+    account_id: str,
+    object_key: str,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    file_path, storage_object = get_public_file_path(db, settings, account_id, object_key)
+    return FileResponse(path=file_path, media_type=storage_object.content_type or None)
 
 
 @router.get("/{object_id}", response_model=StorageObjectResponse)

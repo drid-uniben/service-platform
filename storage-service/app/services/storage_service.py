@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import SessionLocal
-from app.models import AttemptStatus, ObjectStatus, StorageObject
+from app.models import AttemptStatus, FileVisibility, ObjectStatus, StorageObject
 from app.repositories.storage_repository import (
     add_provider_attempt,
     create_storage_object,
+    get_public_storage_object_by_account_and_key,
     get_storage_object_by_id,
     get_storage_object_for_account,
 )
@@ -26,8 +27,17 @@ def queue_storage(
     source_url: str,
     content_type: str | None,
     size_bytes: int | None,
+    visibility: FileVisibility,
 ) -> StorageObject:
-    storage_object = create_storage_object(db, account_id, object_key, source_url, content_type, size_bytes)
+    storage_object = create_storage_object(
+        db,
+        account_id,
+        object_key,
+        source_url,
+        content_type,
+        size_bytes,
+        visibility,
+    )
     db.commit()
     db.refresh(storage_object)
     return storage_object
@@ -47,6 +57,23 @@ def validate_object_key_path(settings: Settings, account_id: str, object_key: st
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+def get_public_file_path(
+    db: Session,
+    settings: Settings,
+    account_id: str,
+    object_key: str,
+) -> tuple[Path, StorageObject]:
+    storage_object = get_public_storage_object_by_account_and_key(db, account_id, object_key)
+    if not storage_object:
+        raise HTTPException(status_code=404, detail="Public file not found.")
+
+    absolute_path, _ = resolve_storage_path(settings.storage_root, account_id, object_key)
+    if not absolute_path.exists() or not absolute_path.is_file():
+        raise HTTPException(status_code=404, detail="Public file not found.")
+
+    return absolute_path, storage_object
+
+
 def _build_direct_upload_source_url(upload_file: UploadFile) -> str:
     filename = Path(upload_file.filename or "upload").name or "upload"
     return f"direct-upload://{filename}"
@@ -59,6 +86,7 @@ def store_uploaded_object(
     upload_file: UploadFile,
     settings: Settings,
     request_id: str | None,
+    visibility: FileVisibility,
 ) -> StorageObject:
     storage_object = create_storage_object(
         db,
@@ -67,6 +95,7 @@ def store_uploaded_object(
         _build_direct_upload_source_url(upload_file),
         upload_file.content_type,
         None,
+        visibility,
     )
     db.flush()
 
