@@ -63,6 +63,7 @@ The compose setup only runs the storage service. Provide `DATABASE_URL` in `.env
 
 - `POST /auth/keys`: create an account and API key.
 - `POST /objects/store`: queue object storage to local disk (requires `x-api-key`).
+- `POST /objects/upload`: upload a file directly to local disk as `multipart/form-data` (requires `x-api-key`).
 - `GET /objects/{id}`: check object status (requires `x-api-key`).
 - `POST /webhooks`: register webhook endpoint (requires `x-api-key`).
 

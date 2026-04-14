@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -10,6 +10,7 @@ from app.services.storage_service import (
     get_status,
     process_storage_object,
     queue_storage,
+    store_uploaded_object,
     validate_object_key_path,
 )
 
@@ -45,6 +46,30 @@ def queue_storage_route(
     )
 
     return {"id": storage_object.id, "status": "queued"}
+
+
+@router.post("/upload", response_model=StorageObjectResponse, status_code=201)
+def upload_storage_route(
+    request: Request,
+    object_key: str = Form(..., alias="objectKey"),
+    file: UploadFile = File(...),
+    auth: tuple[str, str] = Depends(require_api_key),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    account_id, _ = auth
+    validate_object_key_path(settings, account_id, object_key)
+
+    storage_object = store_uploaded_object(
+        db,
+        account_id,
+        object_key,
+        file,
+        settings,
+        getattr(request.state, "request_id", None),
+    )
+
+    return to_storage_object_response(storage_object)
 
 
 @router.get("/{object_id}", response_model=StorageObjectResponse)

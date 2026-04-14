@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
+from shutil import copyfileobj
 
 import httpx
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -44,6 +45,105 @@ def validate_object_key_path(settings: Settings, account_id: str, object_key: st
         resolve_storage_path(settings.storage_root, account_id, object_key)
     except InvalidObjectKeyError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _build_direct_upload_source_url(upload_file: UploadFile) -> str:
+    filename = Path(upload_file.filename or "upload").name or "upload"
+    return f"direct-upload://{filename}"
+
+
+def store_uploaded_object(
+    db: Session,
+    account_id: str,
+    object_key: str,
+    upload_file: UploadFile,
+    settings: Settings,
+    request_id: str | None,
+) -> StorageObject:
+    storage_object = create_storage_object(
+        db,
+        account_id,
+        object_key,
+        _build_direct_upload_source_url(upload_file),
+        upload_file.content_type,
+        None,
+    )
+    db.flush()
+
+    absolute_path, relative_path = resolve_storage_path(settings.storage_root, account_id, object_key)
+    Path(absolute_path).parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        upload_file.file.seek(0)
+        with Path(absolute_path).open("wb") as destination:
+            copyfileobj(upload_file.file, destination)
+
+        storage_object.size_bytes = Path(absolute_path).stat().st_size
+        add_provider_attempt(db, storage_object.id, "vps-disk", AttemptStatus.stored)
+
+        storage_object.status = ObjectStatus.stored
+        storage_object.provider_used = "vps-disk"
+        storage_object.stored_url = relative_path
+        db.commit()
+
+        print(
+            json.dumps(
+                {
+                    "requestId": request_id,
+                    "provider": "vps-disk",
+                    "status": "stored",
+                    "storageObjectId": storage_object.id,
+                }
+            )
+        )
+
+        emit_storage_event(
+            db,
+            storage_object.account_id,
+            {
+                "objectId": storage_object.id,
+                "status": "stored",
+                "objectPath": relative_path,
+            },
+        )
+        return storage_object
+    except Exception as error:  # noqa: BLE001
+        failure_reason = str(error)
+
+        add_provider_attempt(
+            db,
+            storage_object.id,
+            "vps-disk",
+            AttemptStatus.failed,
+            error_message=failure_reason,
+        )
+
+        storage_object.status = ObjectStatus.failed
+        storage_object.provider_used = "vps-disk"
+        db.commit()
+
+        print(
+            json.dumps(
+                {
+                    "requestId": request_id,
+                    "provider": "vps-disk",
+                    "status": "failed",
+                    "storageObjectId": storage_object.id,
+                    "failureReason": failure_reason,
+                }
+            )
+        )
+
+        emit_storage_event(
+            db,
+            storage_object.account_id,
+            {
+                "objectId": storage_object.id,
+                "status": "failed",
+                "failureReason": failure_reason,
+            },
+        )
+        raise HTTPException(status_code=500, detail="Failed to store uploaded file.") from error
 
 
 def process_storage_object(storage_object_id: str, request_id: str | None, settings: Settings) -> None:
