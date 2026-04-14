@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: storage-service
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     ports:
