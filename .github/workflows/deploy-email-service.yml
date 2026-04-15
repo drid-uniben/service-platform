@@ -13,8 +13,8 @@ permissions:
   packages: write
 
 jobs:
-    name: Build and Push Email Service Image
   build-and-push:
+    name: Build and Push Email Service Image
     runs-on: ubuntu-latest
 
     steps:
