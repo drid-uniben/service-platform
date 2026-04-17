@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.core.case_normalizer import SnakeCaseRoute
 from app.db import get_db
 from app.dependencies.auth import require_api_key
 from app.models.enums import FileVisibility
@@ -17,7 +18,7 @@ from app.services.storage_service import (
     validate_object_key_path,
 )
 
-router = APIRouter(prefix="/objects", tags=["objects"])
+router = APIRouter(prefix="/objects", tags=["objects"], route_class=SnakeCaseRoute)
 
 
 @router.post("/store", response_model=QueueStorageResponse, status_code=202)
@@ -30,15 +31,15 @@ def queue_storage_route(
     settings: Settings = Depends(get_settings),
 ):
     account_id, _ = auth
-    validate_object_key_path(settings, account_id, payload.objectKey)
+    validate_object_key_path(settings, account_id, payload.object_key)
 
     storage_object = queue_storage(
         db,
         account_id,
-        payload.objectKey,
-        str(payload.sourceUrl),
-        payload.contentType,
-        payload.sizeBytes,
+        payload.object_key,
+        str(payload.source_url),
+        payload.content_type,
+        payload.size_bytes,
         payload.visibility,
     )
 
@@ -55,7 +56,7 @@ def queue_storage_route(
 @router.post("/upload", response_model=StorageObjectResponse, status_code=201)
 def upload_storage_route(
     request: Request,
-    object_key: str = Form(..., alias="objectKey"),
+    objectKey: str = Form(...),  # Keep camelCase here: multipart OpenAPI uses route Form param names in this FastAPI version.
     file: UploadFile = File(...),
     visibility: FileVisibility = Form(default=FileVisibility.private),
     auth: tuple[str, str] = Depends(require_api_key),
@@ -63,6 +64,7 @@ def upload_storage_route(
     settings: Settings = Depends(get_settings),
 ):
     account_id, _ = auth
+    object_key = objectKey
     validate_object_key_path(settings, account_id, object_key)
 
     storage_object = store_uploaded_object(
