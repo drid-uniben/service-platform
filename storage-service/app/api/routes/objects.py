@@ -56,7 +56,8 @@ def queue_storage_route(
 @router.post("/upload", response_model=StorageObjectResponse, status_code=201)
 def upload_storage_route(
     request: Request,
-    objectKey: str = Form(...),  # Keep camelCase here: multipart OpenAPI uses route Form param names in this FastAPI version.
+    # Keep camelCase here: multipart OpenAPI uses route Form param names in this FastAPI version.
+    objectKey: str = Form(...),  
     file: UploadFile = File(...),
     visibility: FileVisibility = Form(default=FileVisibility.private),
     auth: tuple[str, str] = Depends(require_api_key),
