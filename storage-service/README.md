@@ -36,6 +36,12 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 3000
 ```
 
+## Linting
+We use ruff for linting, and you can run the linter using:
+```bash
+uv run ruff check app
+```
+
 ## Migration Workflow
 
 Migrations are intentionally created manually by developers when schema changes are made.
@@ -81,8 +87,6 @@ app/
 	schemas/        # Pydantic schemas and response mappers
 	services/       # business logic orchestration
 ```
-
-Detailed architecture notes: `docs/architecture.md`
 
 ## Architecture Highlights
 
