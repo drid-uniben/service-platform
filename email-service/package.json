@@ -5,7 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm start:dev",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
