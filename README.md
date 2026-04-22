@@ -97,3 +97,6 @@ Example:
 ## Summary
 
 We are building a **modular backend platform** with shared services (auth, storage, email) using a single repository for simplicity and speed. Each service is independent but designed to work together as a unified system.
+
+## Documentation
+[Architecture](docs/architecture.md)
