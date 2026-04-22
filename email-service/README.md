@@ -40,6 +40,7 @@ pnpm dev
 
 - Swagger UI: `http://localhost:3000/docs`
 - OpenAPI JSON: `http://localhost:3000/docs-json`
+- OpenAPI YAML: `docs/openapi.yaml`
 - Auth: click `Authorize` in Swagger UI and provide `x-api-key`.
 
 ## Core Endpoints
@@ -57,3 +58,48 @@ pnpm dev
 - In-process retry strategy (3 attempts)
 - Hashed API key auth
 - Provider attempt logging and webhook event emission
+
+## Local Setup and Verification
+
+### Prerequisites
+- Node.js installed
+- pnpm installed (`npm install -g pnpm`)
+- PostgreSQL running locally
+
+### Environment
+1. Copy env template:
+   ```bash
+   cp .env.example .env
+   ```
+2. Set required variables in `.env` from `.env.example`:
+   - `DATABASE_URL`
+   - SMTP settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+   - `EMAIL_FROM`
+   - `SHADOW_DATABASE_URL` if Prisma requires a shadow database for local migrations
+
+Example:
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/email_service?schema=public"
+```
+
+### Run locally
+```bash
+pnpm install
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm dev
+```
+
+### OpenAPI docs
+- `http://localhost:3000/docs`
+- `http://localhost:3000/docs-json`
+
+### Functional test flow
+1. `POST /auth/keys`
+2. `POST /emails/send` (include `x-api-key`)
+3. `GET /emails/:id`
+
+### CI/CD container publish
+GitHub Actions workflow:
+- `.github/workflows/deploy-email-service.yml`
+Builds and publishes email-service image to GHCR on `staging` updates.
