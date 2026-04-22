@@ -40,7 +40,7 @@ pnpm dev
 
 - Swagger UI: `http://localhost:3000/docs`
 - OpenAPI JSON: `http://localhost:3000/docs-json`
-- OpenAPI YAML (committed): `docs/openapi.yaml`
+- OpenAPI YAML: `docs/openapi.yaml`
 - Auth: click `Authorize` in Swagger UI and provide `x-api-key`.
 
 ## Core Endpoints
