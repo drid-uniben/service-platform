@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: Email Service API
+  version: 1.0.0
+  description: |
+    Provider-agnostic email abstraction service for queuing, delivery and status tracking.
+servers:
+  - url: http://localhost:3000
+    description: Local development
+tags:
+  - name: Auth
+  - name: Emails
+  - name: Webhooks
+paths:
+  /auth/keys:
+    post:
+      tags: [Auth]
+      summary: Create account API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: API key created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+
+  /emails/send:
+    post:
+      tags: [Emails]
+      summary: Queue a custom HTML email
+      security:
+        - api-key: []
+      parameters:
+        - in: header
+          name: x-request-id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEmailRequest'
+      responses:
+        '201':
+          description: Email queued successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+
+  /emails/send-invitation:
+    post:
+      tags: [Emails]
+      summary: Queue a DRID invitation email using built-in template
+      security:
+        - api-key: []
+      parameters:
+        - in: header
+          name: x-request-id
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendInvitationEmailRequest'
+      responses:
+        '201':
+          description: Invitation email queued successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueResponse'
+
+  /emails/{id}:
+    get:
+      tags: [Emails]
+      summary: Get delivery status for a queued email
+      security:
+        - api-key: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current status of the email message.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailMessage'
+
+  /webhooks:
+    post:
+      tags: [Webhooks]
+      summary: Register webhook endpoint
+      security:
+        - api-key: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+                  format: uri
+              required: [url]
+      responses:
+        '201':
+          description: Webhook registered successfully.
+
+components:
+  securitySchemes:
+    api-key:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    CreateApiKeyRequest:
+      type: object
+      required: [accountName]
+      properties:
+        accountName:
+          type: string
+          minLength: 2
+          example: drid-intern-backend
+    ApiKeyResponse:
+      type: object
+      required: [accountId, apiKey]
+      properties:
+        accountId:
+          type: string
+          example: cmo7q9oz20000eifgrfshgbkl
+        apiKey:
+          type: string
+          example: es_live_xxxxxxxxxxxxxxxxxxxxx
+    SendEmailRequest:
+      type: object
+      required: [to, subject, html]
+      properties:
+        to:
+          type: string
+          format: email
+          example: candidate@example.com
+        subject:
+          type: string
+          example: DRID Internship Update
+        html:
+          type: string
+          example: <p>Your application is now under review.</p>
+        text:
+          type: string
+          example: Your application is now under review.
+    SendInvitationEmailRequest:
+      type: object
+      required: [to, inviteLink, category]
+      properties:
+        to:
+          type: string
+          format: email
+          example: candidate@example.com
+        inviteLink:
+          type: string
+          format: uri
+          example: https://intern.driduniben.com/invite/abc123token
+        category:
+          type: string
+          example: backend
+        subject:
+          type: string
+          example: DRID Internship Challenge Invitation
+    QueueResponse:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          example: cmo7qb29h0004eifgwpvppqrv
+        status:
+          type: string
+          enum: [queued]
+          example: queued
+    EmailMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        accountId:
+          type: string
+        to:
+          type: string
+          format: email
+        subject:
+          type: string
+        html:
+          type: string
+        text:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [queued, sent, failed]
+        providerUsed:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
