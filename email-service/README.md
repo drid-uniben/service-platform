@@ -71,9 +71,11 @@ pnpm dev
    ```bash
    cp .env.example .env
    ```
-2. Set required variables in `.env` (at minimum):
+2. Set required variables in `.env` from `.env.example`:
    - `DATABASE_URL`
-   - other required SMTP/Redis/JWT vars from `.env.example`
+   - SMTP settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`
+   - `EMAIL_FROM`
+   - `SHADOW_DATABASE_URL` if Prisma requires a shadow database for local migrations
 
 Example:
 ```env
@@ -95,7 +97,7 @@ pnpm dev
 ### Functional test flow
 1. `POST /auth/keys`
 2. `POST /emails/send` (include `x-api-key`)
-3. `GET /emails/{id}`
+3. `GET /emails/:id`
 
 ### CI/CD container publish
 GitHub Actions workflow:
