@@ -74,10 +74,104 @@ def get_public_file_path(
     return absolute_path, storage_object
 
 
+def get_storage_object_download_path(
+    db: Session,
+    settings: Settings,
+    account_id: str,
+    storage_object_id: str,
+) -> tuple[Path, StorageObject]:
+    storage_object = get_storage_object_for_account(db, account_id, storage_object_id)
+    if not storage_object or storage_object.status != ObjectStatus.stored:
+        raise HTTPException(status_code=404, detail="Storage object not found.")
+
+    absolute_path, _ = resolve_storage_path(
+        settings.storage_root,
+        account_id,
+        storage_object.object_key,
+    )
+    if not absolute_path.exists() or not absolute_path.is_file():
+        raise HTTPException(status_code=404, detail="Storage object file not found.")
+
+    return absolute_path, storage_object
+
+
 def _build_direct_upload_source_url(upload_file: UploadFile) -> str:
     filename = Path(upload_file.filename or "upload").name or "upload"
     return f"direct-upload://{filename}"
 
+def _handle_success(
+    db: Session,
+    storage_object: StorageObject,
+    relative_path: str,
+    request_id: str | None,
+) -> None:
+    add_provider_attempt(db, storage_object.id, PROVIDER, AttemptStatus.stored)
+
+    storage_object.status = ObjectStatus.stored
+    storage_object.provider_used = PROVIDER
+    storage_object.stored_url = relative_path
+    db.commit()
+
+    print(
+        json.dumps(
+            {
+                "requestId": request_id,
+                "provider": PROVIDER,
+                "status": "stored",
+                "storageObjectId": storage_object.id,
+            }
+        )
+    )
+
+    emit_storage_event(
+        db,
+        storage_object.account_id,
+        {
+            "objectId": storage_object.id,
+            "status": "stored",
+            "objectPath": relative_path,
+        },
+    )
+
+def _handle_failure(
+    db: Session,
+    storage_object: StorageObject,
+    failure_reason: str,
+    request_id: str | None,
+) -> None:
+    add_provider_attempt(
+        db,
+        storage_object.id,
+        PROVIDER,
+        AttemptStatus.failed,
+        error_message=failure_reason,
+    )
+
+    storage_object.status = ObjectStatus.failed
+    storage_object.provider_used = PROVIDER
+    db.commit()
+
+    print(
+        json.dumps(
+            {
+                "requestId": request_id,
+                "provider": PROVIDER,
+                "status": "failed",
+                "storageObjectId": storage_object.id,
+                "failureReason": failure_reason,
+            }
+        )
+    )
+
+    emit_storage_event(
+        db,
+        storage_object.account_id,
+        {
+            "objectId": storage_object.id,
+            "status": "failed",
+            "failureReason": failure_reason,
+        },
+    )
 
 def store_uploaded_object(
     db: Session,
@@ -88,6 +182,7 @@ def store_uploaded_object(
     request_id: str | None,
     visibility: FileVisibility,
 ) -> StorageObject:
+    PROVIDER = "vps-disk"
     storage_object = create_storage_object(
         db,
         account_id,
@@ -103,80 +198,27 @@ def store_uploaded_object(
     Path(absolute_path).parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        upload_file.file.seek(0)
-        with Path(absolute_path).open("wb") as destination:
-            copyfileobj(upload_file.file, destination)
+        _save_file_to_disk(upload_file, absolute_path)
 
         storage_object.size_bytes = Path(absolute_path).stat().st_size
-        add_provider_attempt(db, storage_object.id, "vps-disk", AttemptStatus.stored)
-
-        storage_object.status = ObjectStatus.stored
-        storage_object.provider_used = "vps-disk"
-        storage_object.stored_url = relative_path
-        db.commit()
-
-        print(
-            json.dumps(
-                {
-                    "requestId": request_id,
-                    "provider": "vps-disk",
-                    "status": "stored",
-                    "storageObjectId": storage_object.id,
-                }
-            )
-        )
-
-        emit_storage_event(
-            db,
-            storage_object.account_id,
-            {
-                "objectId": storage_object.id,
-                "status": "stored",
-                "objectPath": relative_path,
-            },
-        )
+        _handle_success(db, storage_object, relative_path, request_id, PROVIDER)
+        
         return storage_object
+       
     except Exception as error:  # noqa: BLE001
         failure_reason = str(error)
-
-        add_provider_attempt(
-            db,
-            storage_object.id,
-            "vps-disk",
-            AttemptStatus.failed,
-            error_message=failure_reason,
-        )
-
-        storage_object.status = ObjectStatus.failed
-        storage_object.provider_used = "vps-disk"
-        db.commit()
-
-        print(
-            json.dumps(
-                {
-                    "requestId": request_id,
-                    "provider": "vps-disk",
-                    "status": "failed",
-                    "storageObjectId": storage_object.id,
-                    "failureReason": failure_reason,
-                }
-            )
-        )
-
-        emit_storage_event(
-            db,
-            storage_object.account_id,
-            {
-                "objectId": storage_object.id,
-                "status": "failed",
-                "failureReason": failure_reason,
-            },
-        )
+        _handle_failure(db, storage_object, failure_reason, request_id, PROVIDER)
         raise HTTPException(status_code=500, detail="Failed to store uploaded file.") from error
 
+def _save_file_to_disk(upload_file: UploadFile, absolute_path: Path) -> None:
+    upload_file.file.seek(0)
+    with Path(absolute_path).open("wb") as destination:
+        copyfileobj(upload_file.file, destination)
 
 def process_storage_object(storage_object_id: str, request_id: str | None, settings: Settings) -> None:
+    PROVIDER = "vps-disk"
     db = SessionLocal()
+    
     try:
         storage_object = get_storage_object_by_id(db, storage_object_id)
         if not storage_object:
@@ -196,68 +238,11 @@ def process_storage_object(storage_object_id: str, request_id: str | None, setti
             Path(absolute_path).parent.mkdir(parents=True, exist_ok=True)
             Path(absolute_path).write_bytes(data)
 
-            add_provider_attempt(db, storage_object.id, "vps-disk", AttemptStatus.stored)
+            _handle_success(db, storage_object, relative_path, request_id, PROVIDER)
 
-            storage_object.status = ObjectStatus.stored
-            storage_object.provider_used = "vps-disk"
-            storage_object.stored_url = relative_path
-            db.commit()
-
-            print(
-                json.dumps(
-                    {
-                        "requestId": request_id,
-                        "provider": "vps-disk",
-                        "status": "stored",
-                        "storageObjectId": storage_object.id,
-                    }
-                )
-            )
-
-            emit_storage_event(
-                db,
-                storage_object.account_id,
-                {
-                    "objectId": storage_object.id,
-                    "status": "stored",
-                    "objectPath": relative_path,
-                },
-            )
         except Exception as error:  # noqa: BLE001
             failure_reason = str(error)
 
-            add_provider_attempt(
-                db,
-                storage_object.id,
-                "vps-disk",
-                AttemptStatus.failed,
-                error_message=failure_reason,
-            )
-
-            storage_object.status = ObjectStatus.failed
-            storage_object.provider_used = "vps-disk"
-            db.commit()
-
-            print(
-                json.dumps(
-                    {
-                        "requestId": request_id,
-                        "provider": "vps-disk",
-                        "status": "failed",
-                        "storageObjectId": storage_object.id,
-                        "failureReason": failure_reason,
-                    }
-                )
-            )
-
-            emit_storage_event(
-                db,
-                storage_object.account_id,
-                {
-                    "objectId": storage_object.id,
-                    "status": "failed",
-                    "failureReason": failure_reason,
-                },
-            )
+            _handle_failure(db, storage_object, failure_reason, request_id, PROVIDER)
     finally:
         db.close()
